@@ -18,7 +18,7 @@ from .dataset import discover
 from .evaluation import classification_report, plot_reports
 from .extraction import source_signature
 from .experiments import Registry, append_event, runtime_details, write_csv
-from .features import FEATURE_VERSION
+from .features import FEATURE_VERSION, mirror_frames
 from .jobs import Job
 from .network import build_model, tensorflow
 from .splitting import loso_splits, random_split
@@ -37,6 +37,7 @@ class TrainOptions:
     augmentation_copies: int = 5
     seed: int = 42
     development: bool = False
+    mirroring: str = "all"
 
 
 def load_dataset(settings: Settings, options: TrainOptions):
@@ -95,10 +96,13 @@ def preprocessing(manifest, options):
         "sign_window": {"trim_margin_s": 0.1, "trim_min_frames": 8, "minimum_hand_detection": manifest["settings"]["min_hand_rate"]},
         "interpolation": "HUDYAT category-core.resample" if manifest["input_shape"][1] == 128 and options.variant == "sequence" else "HUDYAT sign-capture.resampleSign",
         "handedness": {"canonical": options.category == "family" or (options.variant == "static" and options.category != "alphabet"),
-                       "mirrored_augmentation": "only signs with mirror_ok=1 in signs.csv"},
+                       "mirrored_augmentation": options.mirroring},
         "static_method": "one stable pose per source, repeated to 32 frames" if options.variant == "static" else None,
         "augmentation": {"split": "train", "enabled": options.augmentation_copies > 0,
                          "input": "normalized landmarks", "copies_per_original": options.augmentation_copies, "noise_std": 0.01,
+                         "mirroring": options.mirroring,
+                         "mirrored_copies_per_eligible_original": (options.augmentation_copies + 1) // 2 if options.mirroring != "off" else 0,
+                         "mirror_schedule": "first copy is an exact reflection; alternate mirrored and unmirrored copies",
                          "scale_range": [0.9, 1.1], "rotation_degrees": 15, "speed_range": [0.8, 1.2], "frame_removal_probability": 0.08},
     }
     if face:
@@ -147,22 +151,32 @@ def _fit(run, options, manifest, items, samples, labels, classes, split, job, ex
             job.check()
             x_train.append(samples[i])
             y_train.append(labels[i])
-            for _ in range(options.augmentation_copies):
+            mirror_allowed = options.mirroring == "all" or (options.mirroring == "approved" and bool(items[i]["mirror_ok"]))
+            mirrored_copies = 0
+            for copy in range(options.augmentation_copies):
                 job.check()
-                x_train.append(augment(samples[i], rng, items[i]["mirror_ok"], options.variant == "static"))
+                mirrored = mirror_allowed and copy % 2 == 0
+                # Include a clean opposite-hand example even with just one copy.
+                x_train.append(mirror_frames(samples[i]) if mirrored and copy == 0 else
+                               augment(samples[i], rng, mirrored, options.variant == "static"))
+                mirrored_copies += int(mirrored)
                 y_train.append(labels[i])
             augmentation_rows.append({"source": items[i]["relative"], "signer": items[i]["signer"], "label": items[i]["label"],
                                       "original_samples": 1, "augmented_copies": options.augmentation_copies,
-                                      "total_training_samples": 1 + options.augmentation_copies, "mirror_allowed": bool(items[i]["mirror_ok"])})
+                                      "total_training_samples": 1 + options.augmentation_copies, "mirror_allowed": mirror_allowed,
+                                      "mirror_approved": bool(items[i]["mirror_ok"]), "mirroring": options.mirroring,
+                                      "mirrored_copies": mirrored_copies})
         x_train, y_train = np.asarray(x_train), np.asarray(y_train)
         state.update(training_sources=len(split["train"]), augmented_training_samples=len(x_train),
                      generated_training_samples=len(x_train) - len(split["train"]),
+                     mirrored_training_samples=sum(row["mirrored_copies"] for row in augmentation_rows),
                      validation_sources=len(split["validation"]), test_sources=len(split["test"]))
         write_csv(run / "augmentation.csv", augmentation_rows)
         append_event(run / "events.jsonl", {"type": "augmentation", "copies_per_original": options.augmentation_copies,
                                            "original_sources": len(split["train"]), "generated_samples": state["generated_training_samples"],
+                                           "mirroring": options.mirroring, "mirrored_samples": state["mirrored_training_samples"],
                                            "total_training_samples": len(x_train), "split": "train"})
-        job.emit(f"Data augmentation: {len(split['train'])} originals + {state['generated_training_samples']} generated = {len(x_train)} training samples ({options.augmentation_copies} copies per original). Validation/test are unmodified. Details: {run / 'augmentation.csv'}")
+        job.emit(f"Data augmentation: {len(split['train'])} originals + {state['generated_training_samples']} generated = {len(x_train)} training samples ({options.augmentation_copies} copies per original; {state['mirrored_training_samples']} mirrored, policy: {options.mirroring}). Validation/test are unmodified. Details: {run / 'augmentation.csv'}")
         write_json(run / "run.json", state)
         original_counts = Counter(int(labels[i]) for i in split["train"])
         weights = {i: len(split["train"]) / (len(classes) * original_counts[i]) for i in range(len(classes))}
@@ -255,6 +269,8 @@ def train(settings: Settings, options: TrainOptions, job: Job | None = None) -> 
         raise ValueError("Use a canonical category ID, a static/sequence version, and random/loso protocol.")
     if not 1 <= options.epochs <= 150 or options.batch_size < 1 or options.learning_rate <= 0 or options.augmentation_copies < 0:
         raise ValueError("Invalid training settings; epochs must be 1-150.")
+    if options.mirroring not in ("all", "approved", "off"):
+        raise ValueError("Mirroring must be all, approved, or off.")
     job.emit("Checking source files, sample checksums, and study coverage...")
     manifest, items, samples, labels, signs, classes = load_dataset(settings, options)
     # Validate all folds before creating a run or importing TensorFlow.

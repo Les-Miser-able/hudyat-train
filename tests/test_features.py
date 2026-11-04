@@ -63,6 +63,38 @@ def test_mirroring_twice_restores_hands_locations_and_presence(detections):
     assert np.array_equal(mirror_frames(mirror_frames(sample)), sample)
 
 
+@pytest.mark.parametrize("features", [128, 141])
+def test_mirror_swaps_hands_reflects_only_x_and_keeps_time_order(features):
+    sample = np.zeros((4, features), np.float32)
+    sample[:, 126:128] = [[0, 1], [1, 0], [1, 1], [0, 0]]
+    for frame in range(4):
+        for slot in range(2):
+            if sample[frame, 126 + slot]:
+                points = np.arange(63, dtype=np.float32).reshape(21, 3) + 1 + frame * 100 + slot * 1000
+                sample[frame, slot * 63:(slot + 1) * 63] = points.ravel()
+                if features == 141:
+                    sample[frame, 128 + slot * 6:134 + slot * 6] = np.arange(6) + 1 + frame * 10 + slot * 100
+    if features == 141:
+        sample[:, 140] = [1, 0, 1, 1]
+    original = sample.copy()
+    mirrored = mirror_frames(sample)
+    assert mirrored.shape == sample.shape and mirrored.dtype == np.float32
+    for slot in range(2):
+        before = original[:, (1 - slot) * 63:(2 - slot) * 63].reshape(4, 21, 3)
+        after = mirrored[:, slot * 63:(slot + 1) * 63].reshape(4, 21, 3)
+        np.testing.assert_array_equal(after[:, :, 0], -before[:, :, 0])
+        np.testing.assert_array_equal(after[:, :, 1:], before[:, :, 1:])
+        np.testing.assert_array_equal(mirrored[:, 126 + slot], original[:, 127 - slot])
+        if features == 141:
+            before = original[:, 128 + (1 - slot) * 6:134 + (1 - slot) * 6]
+            after = mirrored[:, 128 + slot * 6:134 + slot * 6]
+            np.testing.assert_array_equal(after[:, 0::2], -before[:, 0::2])
+            np.testing.assert_array_equal(after[:, 1::2], before[:, 1::2])
+    if features == 141:
+        np.testing.assert_array_equal(mirrored[:, 140], original[:, 140])
+    np.testing.assert_array_equal(sample, original)
+
+
 def test_static_has_one_pose_sequence_retains_time_and_family_has_location(detections):
     args = (detections["raw"], detections["locations"], 1280, 720, 30)
     static, static_norm, stats = prepare(*args, "alphabet", "static")

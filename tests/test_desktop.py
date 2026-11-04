@@ -90,15 +90,59 @@ def test_desktop_augmentation_controls_reach_the_training_job(project, monkeypat
         assert app.augmentation_enabled.get()
         assert app.augmentation_copies.get() == "5"
         assert "6 training samples" in app.augmentation_summary.get()
+        assert app.mirroring.get() == "All signs"
+        assert "3 mirrored copies per original" in app.augmentation_summary.get()
+        app.train()
+        assert commands[-1][commands[-1].index("--mirroring") + 1] == "all"
         app.development.set(True)
         app.augmentation_copies.set("3")
         app.train()
         assert commands[-1][-2:] == ["3", "--development"]
         assert "--augmentation-copies" in commands[-1]
+        app.mirroring.set("Approved signs only")
+        assert "2 mirrored copies per approved original" in app.augmentation_summary.get()
+        app.train()
+        assert commands[-1][commands[-1].index("--mirroring") + 1] == "approved"
+        app.mirroring.set("Off")
+        assert "mirroring is off" in app.augmentation_summary.get()
+        app.train()
+        assert commands[-1][commands[-1].index("--mirroring") + 1] == "off"
         app.augmentation_enabled.set(False)
         app._augmentation_controls()
         assert str(app.augmentation_box["state"]) == "disabled"
+        assert str(app.mirroring_box["state"]) == "disabled"
         app.train()
         assert commands[-1][-2:] == ["0", "--development"]
+    finally:
+        window.destroy()
+
+
+def test_desktop_hudyat_simulator_passes_selected_models_and_settings(project, monkeypatch):
+    from hudyat_train.gui import App, create_window
+    try:
+        window = create_window()
+    except Exception as error:
+        pytest.skip(f"Desktop display unavailable: {error}")
+    window.withdraw()
+    try:
+        app = App(window, project.root)
+        commands = []
+        monkeypatch.setattr(app, "_start", lambda arguments, kind: commands.append((arguments, kind)))
+        assert app.test_modes.tab(2, "text") == "Simulate HUDYAT"
+        assert app.simulation_profile.get() == "baseline"
+        app.test_run.set(str(project.root / "selected-model"))
+        app.simulation_candidate.set(str(project.root / "candidate-model"))
+        app.simulation_settings.set(str(project.root / "lab-results.json"))
+        app.simulation_profile.set("enhanced")
+        app.live_target.set("A")
+        app.start_simulation()
+        arguments, kind = commands[-1]
+        assert kind == "simulation" and arguments[0] == "simulate"
+        assert arguments[arguments.index("--run") + 1] == str(project.root / "selected-model")
+        assert arguments[arguments.index("--candidate") + 1] == str(project.root / "candidate-model")
+        assert arguments[arguments.index("--settings-file") + 1] == str(project.root / "lab-results.json")
+        assert arguments[arguments.index("--profile") + 1] == "enhanced"
+        assert arguments[arguments.index("--hudyat") + 1] == app.hudyat_path.get()
+        assert arguments[arguments.index("--target") + 1] == "A"
     finally:
         window.destroy()

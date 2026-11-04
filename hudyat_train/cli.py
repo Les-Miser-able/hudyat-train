@@ -46,6 +46,8 @@ def parser():
     training.add_argument("--seed", type=int, default=42)
     training.add_argument("--augmentation-copies", type=int, default=5,
                           help="Training-only augmented copies per original (default: 5; 0 disables; other counts require --development)")
+    training.add_argument("--mirroring", choices=("all", "approved", "off"), default="all",
+                          help="Left/right training augmentation: all signs (default), only mirror_ok=1 signs, or off")
     training.add_argument("--development", action="store_true", help="Explicitly allow incomplete study data or fewer epochs")
     exporting = sub.add_parser("export", help="Stage a HUDYAT catalog, model metadata, weights, and detectors")
     exporting.add_argument("--run", required=True, type=Path)
@@ -72,6 +74,15 @@ def parser():
     worker.add_argument("--control-stdin", action="store_true")
     worker.add_argument("--no-preview", action="store_true")
     worker.add_argument("--max-attempts", type=int)
+    simulation = sub.add_parser("simulate", help="Run HUDYAT's actual browser camera, settings, and recognition code with a selected model")
+    simulation.add_argument("--run", type=Path, required=True)
+    simulation.add_argument("--hudyat", type=Path, default=ROOT.parent / "HUDYAT")
+    simulation.add_argument("--candidate", type=Path, help="Optional Alphabet candidate run/export for the Recognition lab")
+    simulation.add_argument("--profile", choices=("baseline", "enhanced"), default="baseline")
+    simulation.add_argument("--settings-file", type=Path, help="Settings or Copy results JSON from HUDYAT's Recognition lab")
+    simulation.add_argument("--target")
+    simulation.add_argument("--port", type=int, default=0, help="Local port; 0 selects an available port")
+    simulation.add_argument("--no-browser", action="store_true")
     return p
 
 
@@ -131,7 +142,8 @@ def main(argv=None):
         elif args.command == "train":
             from .training import TrainOptions, train
             result = train(settings, TrainOptions(args.category, args.variant, args.protocol, args.epochs,
-                                                  augmentation_copies=args.augmentation_copies, seed=args.seed, development=args.development), job)
+                                                  augmentation_copies=args.augmentation_copies, seed=args.seed, development=args.development,
+                                                  mirroring=args.mirroring), job)
             job.emit(f"RUN_PATH={result}")
         elif args.command == "export":
             from .exporting import export_run
@@ -169,6 +181,12 @@ def main(argv=None):
                 raise ValueError("--max-attempts must be positive.")
             run_live(settings, project_path(args.run), args.camera, args.mode, args.target,
                      project_path(args.video) if args.video else None, args.control_stdin, args.max_attempts, job, preview=not args.no_preview)
+        elif args.command == "simulate":
+            from .simulation import run_simulator
+            run_simulator(settings, project_path(args.run), args.hudyat.resolve(),
+                          project_path(args.candidate) if args.candidate else None, args.profile,
+                          project_path(args.settings_file) if args.settings_file else None, args.target,
+                          args.port, not args.no_browser, job)
         elif args.command == "verify":
             from .parity import write_fixture
             fixture = write_fixture(settings.root / "tmp" / "browser-preprocessing-parity.json")

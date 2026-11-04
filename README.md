@@ -53,7 +53,7 @@ Raw media is read in place. Extraction does not move or delete it. `dataset/cach
 1. In **Dataset**, scan the selected version. Select a category to see its sign-by-signer counts. These are raw counts before extraction quality checks.
 2. In **Extract**, extract a category, or choose `all`. Hand detection must reach 80% inside the trimmed sign window. Two-hand signs also require 80% both-hands detection. Family requires usable face-location information.
 3. In **Train**, choose `random` or `loso`. A study run requires every expected class and at least 15 accepted sources for each of S1-S7. Use the explicit **Development run** option for incomplete data or fewer epochs.
-4. In **Test models**, select a model/run and use automated held-out testing or live webcam testing. Both automatically save their results.
+4. In **Test models**, select a model/run and choose automated held-out testing, native live webcam testing, or **Simulate HUDYAT**. Each records its results separately.
 5. In **Results**, browse the comparison, summary, per-class, and attempt tables, and view graphs or open the complete HTML report.
 6. In **Export**, select a completed random-split run. Export a bundle, then verify it against the installed HUDYAT client. The job log is also saved under `reports/jobs/`.
 
@@ -70,15 +70,17 @@ Both use the same Conv1D-BiLSTM architecture and separate sample/run/export dire
 
 Family uses 141 features, including 13 hand-to-face location values. Other categories use 128. Hand slots, normalization, resampling, and canonical-hand handling match HUDYAT's current runtime; [docs/FEATURE_CONTRACT.md](docs/FEATURE_CONTRACT.md) gives the exact mapping.
 
-`signs.csv` keeps the manuscript vocabulary fixed. `mode` currently marks only J and Z dynamic, following Appendix A. `mirror_ok` controls expert-approved mirrored training augmentation. Its initial values were copied from the collector and are all `0`; change these only after approval. Other augmentation still generates five modified training copies. No automatic linguistic approval is inferred from a recording's presence.
+`signs.csv` keeps the manuscript vocabulary fixed. `mode` currently marks only J and Z dynamic, following Appendix A. `mirror_ok` records per-sign expert approval; its initial values were copied from the collector and are all `0`. New runs default to mirrored augmentation for all signs to teach either hand. Choose **Approved signs only** in Train (CLI: `--mirroring approved`) to restrict mirroring to `mirror_ok=1`, or **Off** (`--mirroring off`) to disable it. The training setting does not change the catalog's approval flags.
 
 **Training and reports**
 
-Study defaults: Adam at 0.001; batch size 32; at most 150 epochs; early stopping on validation loss with patience 20 and best weights restored; ReduceLROnPlateau; class weighting; five augmented copies per original training source. Augmentation includes noise, scale, rotation, timing changes, frame removal, and approved mirroring. Static augmentation preserves a held pose.
+Study defaults: Adam at 0.001; batch size 32; at most 150 epochs; early stopping on validation loss with patience 20 and best weights restored; ReduceLROnPlateau; class weighting; five augmented copies per original training source. Augmentation includes noise, scale, rotation, timing changes, frame removal, and left/right mirroring. Static augmentation preserves a held pose.
 
-In **Train > Data augmentation**, leave **Enable training augmentation** checked and **Augmented copies per original** at **5** for the study configuration. Each training source contributes one original plus five generated landmark samples. Rotation is up to 15 degrees, scale is 0.9-1.1, and landmark noise has a standard deviation of 0.01; sequence inputs also use timing changes (0.8-1.2) and frame removal (8% probability). Mirroring remains restricted to signs explicitly approved in `signs.csv`. Augmented samples are generated in memory after splitting; raw files and held-out samples are never augmented. Each run/fold saves `augmentation.csv` with the source, signer, label, and generated count, as well as an augmentation event and counts in `run.json`.
+In **Train > Data augmentation**, leave **Enable training augmentation** checked, **Augmented copies per original** at **5**, and **Left/right mirroring** at **All signs**. Each training source contributes one original plus five generated landmark samples: three mirrored and two unmirrored copies. The first copy is an exact reflection; the remaining copies use perturbations and alternate orientations. Any positive copy count guarantees at least one mirrored example for each eligible source. Mirroring swaps the two 63-coordinate hand blocks and presence flags, negates X (including wrist movement and Family face locations), and preserves Y, Z, and time order. With the original included, the default training samples are evenly divided between orientations.
 
-For experiments, enable **Development run** to change the copy count or turn augmentation off. The CLI equivalent is `train ... --development --augmentation-copies 3`; `--augmentation-copies 0` disables it. Omitting the option uses five copies. Changing augmentation affects newly trained models; existing checkpoints retain their recorded training settings.
+Rotation is up to 15 degrees, scale is 0.9-1.1, and landmark noise has a standard deviation of 0.01; sequence inputs also use timing changes (0.8-1.2) and frame removal (8% probability). Augmented samples are generated in memory after splitting; raw files and held-out samples are never augmented. Each run/fold saves `augmentation.csv` with the source, signer, label, mirroring policy, approval flag, and generated/mirrored counts, as well as an augmentation event and counts in `run.json`. Canonical-hand preprocessing used by Family and non-Alphabet static models is preserved.
+
+For experiments, enable **Development run** to change the copy count or turn augmentation off. The CLI equivalent is `train ... --development --augmentation-copies 3`; `--augmentation-copies 0` disables it, including mirroring. Omitting the options uses five copies and `--mirroring all`. Mirroring settings need no re-extraction. Retrain and export a new model to use these examples in live recognition; existing checkpoints retain their recorded training settings. Left-hand recognition accuracy still requires testing on actual left-handed recordings.
 
 Random splitting is stratified by class, approximately 70/15/15 with integer rounding and at least one independent source per split. LOSO holds each signer out for testing once, reserves the next signer for validation, and trains on the remaining signers. With seven signers, each fold uses five for training, one for validation, and one for testing. No held-out test signer is used for model selection. At least three signers are needed even for a development LOSO run.
 
@@ -94,7 +96,7 @@ Training logs every completed epoch immediately to `events.jsonl`, `history.csv`
 |---|---|---|
 | Experiment comparison | Run/session, category, version, protocol, status, development flag, accuracy, precision/recall/F1, latency, dataset ID | `reports/experiments.csv` |
 | Epoch history | Training/validation loss and accuracy, epoch, learning rate when available | `RUN/history.csv` |
-| Data augmentation | Training source, signer, label, generated copies, total training samples, mirroring approval | `RUN/augmentation.csv` |
+| Data augmentation | Training source, signer, label, generated/mirrored copies, total training samples, mirroring policy and approval | `RUN/augmentation.csv` |
 | Summary | Scores, sample counts, rejection/invalid counts, timing scope | `RUN_OR_SESSION/summary.csv` |
 | Per class | Label, support, precision, recall, F1 | `RUN_OR_SESSION/per-class.csv` |
 | Test attempts | Expected/predicted sign, confidence, correctness/rejection, model/pipeline timing, source, signer, fold | `SESSION/attempts.csv` |
@@ -122,6 +124,20 @@ Live testing logs invalid captures, below-threshold predictions, correct/incorre
 
 Test sessions are stored in `reports/testing/<category>/<variant>/<timestamp-kind>/` with `session.json`, `events.jsonl`, `attempts.json`, `attempts.csv`, `summary.json`, report tables, PNG graphs, and `report.html`. Model timing excludes warm-up, camera capture, detection, preprocessing, GUI rendering, and browser work; separately reported pipeline timing adds Python input preparation. These diagnostic timings do not replace the manuscript's browser/device response-time tests.
 
+**Simulate HUDYAT's camera and recognition**
+
+Choose **Test models > Simulate HUDYAT** to test the selected model with the main project's actual browser pipeline. This includes its `useCamera`, `CategoryRecognition`, model loader, normalization, sign segmentation, early checks, static Alphabet hold rules, confidence/margin gates, CPU/GPU tracking and fallback, background blur/removal, preview blur, preloading, and candidate-model selection. It runs TensorFlow.js and MediaPipe Tasks in your browser. The native live tester keeps its existing Python testing behavior.
+
+Node.js 24 is needed for the simulator. Run `setup-simulator.cmd` once to install its packages. In **Settings**, select the current HUDYAT project folder. The simulator builds from that folder at launch and checks that its React, TensorFlow.js, and MediaPipe versions match HUDYAT's lockfile. It reads HUDYAT's sources and public assets without modifying the main project.
+
+Select a completed **random-split training run** or an exported **model version** containing `model.json` and `weights.bin`, then press **Open HUDYAT camera simulator**. A selected Keras run is exported into a private `tmp/` bundle for this session; it is not published or registered with HUDYAT. Select an optional Alphabet candidate run/export to enable comparison with the published selection. LOSO folds remain evaluation artifacts; use a completed random run or an existing export for the simulator.
+
+In the browser, choose an **Expected sign**, press **Enter camera step**, then **Start camera** and allow camera access. The original HUDYAT Recognition lab provides **Baseline**, **Enhanced**, and individual settings. Camera resolution changes apply after stopping/restarting the camera. **Complete settings / import from HUDYAT** accepts either a settings object or the main project's **Copy results (JSON)** output, including sliding-window parameters. Edited JSON should use `profile: "custom"`; named profiles use HUDYAT's current definitions. **New attempt** repeats a prompt, and **Finish simulation** saves the reports and stops the local server. The desktop **Stop job** also stops it and releases the browser camera after the next heartbeat.
+
+The browser requests the same user-facing camera and ideal resolution as HUDYAT; its native camera index setting does not apply. This reproduces the current main-project settings and decision code on the browser/device being used. Camera negotiation, drivers, CPU/GPU availability, and performance still depend on that device. Lesson navigation, authentication and grading are outside this local test shell.
+
+Simulation sessions use the distinct `hudyat_browser_simulation` protocol. Results are saved under `reports/testing/.../*-hudyat-browser/`, with separate subfolders for each settings configuration. Five-second snapshots and immediate decision events retain progress; Save reports, camera stop, profile changes, and finishing generate HTML/CSV reports. Records include `browser-results.json`, `trials.csv`, `decisions.csv`, complete settings, model identities (including candidates), negotiated camera resolution/FPS, browser measurements, and hashes of the actual HUDYAT source files built. Recognized prompts and wrong guesses are browser trial measures; no held-out classification accuracy is inferred. Camera images and full landmark arrays are not included in these saved results.
+
 **CLI examples**
 
 Run from this folder with the configured environment:
@@ -140,6 +156,8 @@ Run from this folder with the configured environment:
 .\.venv\Scripts\python.exe -m hudyat_train test --run "runs/alphabet/sequence/YOUR_RUN"
 .\.venv\Scripts\python.exe -m hudyat_train results --rebuild
 .\.venv\Scripts\python.exe -m hudyat_train live --run "runs/alphabet/sequence/YOUR_RUN" --camera 0 --mode manual
+.\.venv\Scripts\python.exe -m hudyat_train simulate --run "runs/alphabet/sequence/YOUR_RUN" --hudyat "..\HUDYAT" --profile baseline
+# Optional: --profile enhanced, --settings-file lab-results.json, --candidate PATH, --target A, --no-browser
 ```
 
 `doctor` checks installed packages and asset paths. `--root PATH` before the subcommand selects a project directory containing `project.json`. `export --allow-development` is required to export a development checkpoint for testing. `verify --tfjs PATH` can point at a separately installed `@tensorflow/tfjs` package if HUDYAT's client dependencies are not installed locally.
@@ -167,6 +185,7 @@ python tools/smoke_pipeline.py --work tmp/synthetic-check
 python tools/smoke_extraction.py --track "..\hudyat-track" --work tmp/real-check
 # Once the synthetic smoke project and a video fixture exist:
 python tools/smoke_testing.py --project tmp/synthetic-check --video "PATH_TO_ONE_SIGN_CLIP.mp4"
+npm.cmd test --prefix simulator
 ```
 
 The smoke scripts write only isolated `tmp/` workspaces. Synthetic model scores are not FSL performance results. See [VALIDATION.md](VALIDATION.md) for the checks actually performed and their limits.
