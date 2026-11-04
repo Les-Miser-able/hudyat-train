@@ -1,0 +1,20 @@
+{
+  "name": "hudyat-train-simulator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/settings.test.mjs",
+    "test:browser": "node tests/browser.mjs"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "0.10.32",
+    "@tensorflow/tfjs": "4.22.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "playwright-core": "1.56.1",
+    "vite": "8.2.2"
+  }
+}

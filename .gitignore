@@ -13,3 +13,4 @@ exports/
 reports/
 models/*.task
 settings.local.json
+simulator/node_modules/

@@ -28,11 +28,14 @@ _prepare_tcl()
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import uuid
+import webbrowser
 
 from .catalog import CATEGORY_NAMES
 from .cli import initialize
 from .config import ROOT, load_settings
 from .storage import read_json, write_bytes, write_json
+
+MIRRORING_POLICIES = {"All signs": "all", "Approved signs only": "approved", "Off": "off"}
 
 
 class App:
@@ -50,6 +53,7 @@ class App:
         self.seed = tk.StringVar(value=str(self.settings.get("seed")))
         self.augmentation_enabled = tk.BooleanVar(value=True)
         self.augmentation_copies = tk.StringVar(value="5")
+        self.mirroring = tk.StringVar(value="All signs")
         self.augmentation_summary = tk.StringVar()
         self.development = tk.BooleanVar(value=False)
         self.allow_development = tk.BooleanVar(value=False)
@@ -58,6 +62,10 @@ class App:
         self.live_camera = tk.StringVar(value="0")
         self.live_mode = tk.StringVar(value="automatic")
         self.live_target = tk.StringVar(value="(unscored)")
+        self.simulation_profile = tk.StringVar(value="baseline")
+        self.simulation_candidate = tk.StringVar()
+        self.simulation_settings = tk.StringVar()
+        self.simulation_url = tk.StringVar()
         self.live_prediction = tk.StringVar(value="No prediction yet")
         self.live_feedback = tk.StringVar(value="Choose a model and start the camera.")
         self.live_diagnostics = tk.StringVar()
@@ -231,9 +239,16 @@ class App:
         ttk.Label(controls, text="Augmented copies per original").pack(side="left", padx=(20, 8))
         self.augmentation_box = ttk.Spinbox(controls, from_=1, to=100, textvariable=self.augmentation_copies, width=5)
         self.augmentation_box.pack(side="left")
+        mirroring = ttk.Frame(augmentation)
+        mirroring.pack(fill="x", pady=(8, 0))
+        ttk.Label(mirroring, text="Left/right mirroring").pack(side="left")
+        self.mirroring_box = ttk.Combobox(mirroring, textvariable=self.mirroring, values=list(MIRRORING_POLICIES),
+                                         state="readonly", width=23)
+        self.mirroring_box.pack(side="left", padx=8)
         ttk.Label(augmentation, textvariable=self.augmentation_summary, wraplength=980).pack(anchor="w", pady=(6, 0))
-        ttk.Label(augmentation, text="Landmark noise, scaling and rotation; sequence models also use timing changes and frame removal. Mirroring follows each sign's approval in signs.csv.", wraplength=980).pack(anchor="w", pady=(4, 0))
+        ttk.Label(augmentation, text="Mirroring swaps left/right hands and reflects horizontal movement and face locations to teach either hand. Approved signs only uses mirror_ok in signs.csv. Other copies use noise, scaling and rotation; sequences also use timing changes and frame removal.", wraplength=980).pack(anchor="w", pady=(4, 0))
         self.augmentation_copies.trace_add("write", self._augmentation_controls)
+        self.mirroring.trace_add("write", self._augmentation_controls)
         self._augmentation_controls()
         ttk.Checkbutton(frame, text="Development run: allow incomplete study data or fewer epochs", variable=self.development).pack(anchor="w", pady=8)
         ttk.Label(frame, text="Study runs require all expected classes and at least 15 accepted takes for each of S1-S7. Development results are explicitly marked and need a separate export choice.", wraplength=1000).pack(anchor="w", pady=5)
@@ -243,6 +258,7 @@ class App:
     def _augmentation_controls(self, *args):
         enabled = self.augmentation_enabled.get()
         self.augmentation_box.configure(state="normal" if enabled else "disabled")
+        self.mirroring_box.configure(state="readonly" if enabled else "disabled")
         try:
             copies = int(self.augmentation_copies.get()) if enabled else 0
             if copies < 1 and enabled:
@@ -250,7 +266,12 @@ class App:
         except ValueError:
             self.augmentation_summary.set("Enter a positive whole number of augmented copies.")
             return
-        self.augmentation_summary.set(f"Each original produces {copies} augmented copies ({copies + 1} training samples total). Validation and test samples stay unmodified. Study default: 5 copies.")
+        if not copies or self.mirroring.get() == "Off":
+            mirror_summary = "Left/right mirroring is off."
+        else:
+            scope = "per original" if self.mirroring.get() == "All signs" else "per approved original"
+            mirror_summary = f"Includes {(copies + 1) // 2} mirrored copies {scope}, starting with an exact reflection."
+        self.augmentation_summary.set(f"Each original produces {copies} augmented copies ({copies + 1} training samples total). {mirror_summary} Validation and test samples stay unmodified. Study default: 5 copies.")
 
     def _export_page(self, frame):
         self._heading(frame, "Export for HUDYAT", "Choose a completed random-split run. The export contains HUDYAT's existing model.json + weights.bin format, a catalog, matching detector assets, and synthetic parity probes. Static and sequence releases use separate output folders.")
@@ -271,9 +292,11 @@ class App:
         self._path_row(frame, "Model / training run", self.test_run, self.choose_test_model)
         self.test_modes = ttk.Notebook(frame)
         self.test_modes.pack(fill="both", expand=True, pady=8)
-        automatic, live = ttk.Frame(self.test_modes, padding=10), ttk.Frame(self.test_modes, padding=10)
+        automatic, live, simulation = [ttk.Frame(self.test_modes, padding=10) for _ in range(3)]
         self.test_modes.add(automatic, text="Automated held-out test")
         self.test_modes.add(live, text="Live webcam / manual test")
+        self.test_modes.add(simulation, text="Simulate HUDYAT")
+        self._simulation_page(simulation)
         ttk.Label(automatic, text="Replays the exact saved test split. A LOSO parent replays every held-out fold. Original labels and sample checksums are checked; warm-up is excluded from timing.", wraplength=950).pack(anchor="w", pady=10)
         self._button(automatic, "Run automated test", self.automated_test, True).pack(anchor="w", pady=10)
         ttk.Label(automatic, text="Results include raw top-1 accuracy, per-class precision/recall/F1, rejection counts at the model's confidence threshold, and Python model latency. This does not measure HUDYAT browser response time.", wraplength=950).pack(anchor="w", pady=10)
@@ -312,6 +335,41 @@ class App:
         self.top_predictions.column("label", width=220)
         self.top_predictions.column("confidence", width=110)
         self.top_predictions.pack(fill="x", pady=5)
+
+    def _simulation_page(self, frame):
+        self._heading(frame, "Test with HUDYAT's camera and recognition", "Opens a local browser simulator using the current HUDYAT project's actual camera, model loader, Recognition lab and decision rules. The selected model stays local.")
+        row = ttk.Frame(frame)
+        row.pack(fill="x", pady=8)
+        ttk.Label(row, text="Initial HUDYAT profile").pack(side="left")
+        ttk.Combobox(row, textvariable=self.simulation_profile, values=["baseline", "enhanced"], state="readonly", width=15).pack(side="left", padx=10)
+        ttk.Label(frame, text="The browser includes all HUDYAT settings: resolution, CPU/GPU, hand tracking, background blur/removal, sign windows, early checks, hold confirmation, confidence and margin. You can import custom settings copied from HUDYAT.", wraplength=950).pack(anchor="w", pady=8)
+        self._path_row(frame, "Alphabet candidate", self.simulation_candidate,
+                       lambda: self.browse_dir(self.simulation_candidate, self.settings.path("runs_dir")))
+        self._path_row(frame, "Settings JSON (optional)", self.simulation_settings, self._browse_simulation_settings)
+        ttk.Label(frame, text="Choose a completed random-split run or an exported model version above. Candidate comparison is optional and applies to Alphabet. The HUDYAT source folder is selected in Settings. Run setup-simulator.cmd once to install the browser tools.", wraplength=950).pack(anchor="w", pady=8)
+        self._button(frame, "Open HUDYAT camera simulator", self.start_simulation, True).pack(anchor="w", pady=12)
+        self._path_row(frame, "Local simulator URL", self.simulation_url,
+                       lambda: webbrowser.open(self.simulation_url.get()) if self.simulation_url.get().startswith("http://127.0.0.1:") else None)
+        ttk.Label(frame, text="Allow the camera in the browser, choose an expected sign, and enter the camera step. Browser camera selection replaces the native tester's camera index. Results save automatically by settings configuration and appear in Results; camera pixels and landmark arrays are not saved. Finish in the browser or use Stop job here.", wraplength=950).pack(anchor="w", pady=8)
+
+    def _browse_simulation_settings(self):
+        selected = filedialog.askopenfilename(parent=self.window, title="HUDYAT settings or Recognition lab results", filetypes=[("JSON", "*.json")])
+        if selected:
+            self.simulation_settings.set(selected)
+
+    def start_simulation(self):
+        if not self.test_run.get().strip():
+            messagebox.showinfo("Choose a model", "Choose a completed random-split run or exported model version first.", parent=self.window)
+            return
+        arguments = ["simulate", "--run", self.test_run.get(), "--hudyat", self.hudyat_path.get(), "--profile", self.simulation_profile.get()]
+        if self.simulation_candidate.get().strip():
+            arguments.extend(["--candidate", self.simulation_candidate.get().strip()])
+        if self.simulation_settings.get().strip():
+            arguments.extend(["--settings-file", self.simulation_settings.get().strip()])
+        if self._target() is not None:
+            arguments.extend(["--target", self._target()])
+        self.simulation_url.set("")
+        self._start(arguments, "simulation")
 
     def choose_test_model(self, path=None):
         if path is None:
@@ -439,7 +497,7 @@ class App:
         ttk.Button(row, text="Save local settings", command=self.save_settings).pack(side="left")
         self._button(row, "Check extraction dependencies", lambda: self._start(["doctor"], "extraction")).pack(side="left", padx=8)
         self._button(row, "Check training dependencies", lambda: self._start(["doctor"], "training")).pack(side="left")
-        ttk.Label(frame, text="Vocabulary and study paths: signs.csv and project.json. The mirror_ok column controls expert-approved mirrored training augmentation; it is disabled until explicitly approved. Editing either file requires extracting again.", wraplength=1000).pack(anchor="w", pady=12)
+        ttk.Label(frame, text="Vocabulary and study paths: signs.csv and project.json. Train > Left/right mirroring defaults to All signs; Approved signs only follows mirror_ok in signs.csv. Changing the Train control needs no re-extraction. Editing either file requires extracting again.", wraplength=1000).pack(anchor="w", pady=12)
         ttk.Button(frame, text="Open project folder", command=lambda: self.open_path(self.root)).pack(anchor="w")
 
     def _variant_changed(self, event=None):
@@ -453,7 +511,7 @@ class App:
         self.log.configure(state="disabled")
 
     def _python(self, kind):
-        configured = self.train_python.get().strip() if kind in ("training", "export", "testing", "live", "reporting") else self.extract_python.get().strip() if kind in ("extraction", "verify") else ""
+        configured = self.train_python.get().strip() if kind in ("training", "export", "testing", "live", "reporting", "simulation") else self.extract_python.get().strip() if kind in ("extraction", "verify") else ""
         executable = Path(configured or sys.executable)
         if executable.name.lower() == "pythonw.exe" and executable.with_name("python.exe").exists():
             executable = executable.with_name("python.exe")
@@ -530,6 +588,9 @@ class App:
                         self.run_path.set(value.strip().split("=", 1)[1])
                         self.test_run.set(self.run_path.get())
                         self._load_test_classes()
+                    elif value.startswith("SIMULATION_URL="):
+                        self.simulation_url.set(value.strip().split("=", 1)[1])
+                        self.status.set("HUDYAT simulator running. Allow the camera in the browser.")
                 elif kind == "live_event":
                     self._live_event(value)
                 elif kind == "done":
@@ -551,7 +612,7 @@ class App:
                     self.status.set("Completed." if value == 0 else "Stopped." if value == 130 else "Job failed. See the log for details.")
                     if self.job_kind == "scan":
                         self._load_scan()
-                    if self.job_kind in ("training", "testing", "live", "reporting"):
+                    if self.job_kind in ("training", "testing", "live", "reporting", "simulation"):
                         self.results_view.refresh()
                     if self.closing:
                         self.window.destroy()
@@ -614,7 +675,8 @@ class App:
             messagebox.showerror("Study augmentation", "Study runs use 5 augmented copies per original. Enable Development run to experiment with a different count or disable augmentation.", parent=self.window)
             return
         arguments = ["train", "--category", self.category.get(), "--variant", self.variant.get(), "--protocol", self.protocol.get(),
-                     "--epochs", str(epochs), "--seed", str(seed), "--augmentation-copies", str(copies)]
+                     "--epochs", str(epochs), "--seed", str(seed), "--mirroring", MIRRORING_POLICIES[self.mirroring.get()],
+                     "--augmentation-copies", str(copies)]
         if self.development.get():
             arguments.append("--development")
         self._start(arguments, "training")

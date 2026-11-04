@@ -146,6 +146,7 @@ def resample_sign(frames, n: int = FRAMES, extra=None) -> np.ndarray:
 
 
 def mirror_frames(frames) -> np.ndarray:
+    """Reflect normalized X coordinates and swap hands, presence, and face locations."""
     frames = np.asarray(frames, dtype=np.float32)
     mirrored = frames.copy()
     mirrored[:, 0:126:3] *= -1

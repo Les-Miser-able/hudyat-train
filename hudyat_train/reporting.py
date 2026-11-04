@@ -29,7 +29,7 @@ def result_report(directory: Path, state: dict, metrics: dict, attempts=None):
     summary_rows = [{"metric": key, "value": value} for key, value in metrics.items() if isinstance(value, (int, float, str)) or value is None]
     summary_rows += [{"metric": "latency." + key, "value": value} for key, value in metrics.get("latency", {}).items()]
     summary_rows += [{"metric": key, "value": state[key]} for key in
-                     ("training_sources", "generated_training_samples", "augmented_training_samples", "validation_sources", "test_sources", "epochs_completed", "dataset_id") if key in state]
+                     ("training_sources", "generated_training_samples", "mirrored_training_samples", "augmented_training_samples", "validation_sources", "test_sources", "epochs_completed", "dataset_id") if key in state]
     write_csv(directory / "summary.csv", summary_rows, ["metric", "value"])
     if per_class:
         fig, axis = plt.subplots(figsize=(max(8, len(per_class) * 0.45), 4.8))
@@ -94,7 +94,7 @@ def result_report(directory: Path, state: dict, metrics: dict, attempts=None):
     pages = ["<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>",
              f"<title>{escape(title)}</title><style>body{{font:15px system-ui;margin:32px;color:#202923}}h1{{font-size:24px}}table{{border-collapse:collapse}}td,th{{padding:8px;border:1px solid #ddd;text-align:left}}th{{background:#f1f1e9}}img{{max-width:100%;height:auto}}.scroll{{overflow:auto;max-height:480px}}section{{margin:24px 0}}</style>",
              f"<h1>{escape(title)}</h1><p>Status: {escape(state.get('status', 'complete'))}. Development: {escape(str(state.get('development', False)))}.</p>",
-             "<p>Python desktop measurements are separate from HUDYAT browser response-time validation. Unlabelled predictions are excluded from accuracy; rejected and invalid attempts are reported separately.</p>",
+             f"<p>{escape(state.get('measurement_scope', 'Python desktop measurements are separate from HUDYAT browser response-time validation. Unlabelled predictions are excluded from accuracy; rejected and invalid attempts are reported separately.'))}</p>",
              f"<p>{links}</p><section><h2>Summary table</h2>{_table(summary_rows)}</section>",
              f"<section><h2>Per-class table</h2>{_table(per_class)}</section>"]
     if metrics.get("untested_classes"):

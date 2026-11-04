@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from .features import mirror_frames, resample_sign
+from .features import mirror_frames
 
 
-def augment(sample, rng: np.random.Generator, mirror_ok: bool = False, static: bool = False):
+def augment(sample, rng: np.random.Generator, mirror: bool = False, static: bool = False):
+    """Perturb a training sample, optionally reflecting it to the opposite hand."""
     out = np.asarray(sample, dtype=np.float32).copy()
     angle = np.deg2rad(rng.uniform(-15, 15))
     rotation = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
@@ -41,6 +42,6 @@ def augment(sample, rng: np.random.Generator, mirror_ok: bool = False, static: b
                     start = 128 + slot * 6
                     warped[j, start:start + 6] = (1 - w) * compact[lo, start:start + 6] + w * compact[hi, start:start + 6]
         out = warped
-    if mirror_ok and rng.random() < 0.5:
+    if mirror:
         out = mirror_frames(out)
     return out.astype(np.float32)
