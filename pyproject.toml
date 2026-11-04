@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hudyat-train"
+version = "0.1.0"
+description = "Desktop landmark extraction, Conv1D-BiLSTM training, and HUDYAT model exports"
+requires-python = ">=3.12"
+dynamic = ["dependencies"]
+
+[project.scripts]
+hudyat-train = "hudyat_train.cli:main"
+
+[project.gui-scripts]
+hudyat-train-desktop = "hudyat_train.gui:main"
+
+[tool.setuptools.packages.find]
+include = ["hudyat_train*"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

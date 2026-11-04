@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+tmp/
+dataset/raw/**
+!dataset/raw/.gitkeep
+dataset/extracted/
+dataset/cache/
+runs/
+exports/
+reports/
+models/*.task
+settings.local.json

@@ -1,0 +1,13 @@
+Generated with the built-in image_gen tool.
+
+Use case: logo-brand.
+Asset type: original HUDYAT logo, transparent PNG for a Filipino Sign Language learning application, website and project presentations.
+Primary request: Design one polished, memorable, professional logo for the exact brand name "HUDYAT", inspired by communication through hands and inclusive learning.
+Subject: A beautifully reduced open-hand symbol integrated with a rounded speech-bubble silhouette. Use confident, rounded geometric shapes and deliberate negative space so the hand and communication idea read instantly. The hand is an abstract brand symbol, not a depiction or instruction of any particular sign. Give the emblem a small, purposeful gold gesture accent.
+Style/medium: clean vector-style brand design rendered as a high-resolution raster image; flat solid fills, smooth crisp edges, visually balanced, contemporary and friendly.
+Color palette: match the existing HUDYAT app brand: blue #0077CE and warm gold #FFC145. Blue is dominant; gold is a restrained accent. No additional colors.
+Composition/framing: a single horizontal logo lockup, emblem to the left of the wordmark, optically balanced, generous clear transparent padding around the full design. The mark must be strong enough to work independently as an app icon.
+Typography: exceptionally clean bold rounded sans-serif, inspired by Nunito, uppercase, custom-feeling precise spacing and confident legibility.
+Text (verbatim): "HUDYAT". Spell H U D Y A T exactly once. No tagline or other text.
+Constraints: genuinely transparent background with alpha; one finished logo only; flat design with strong silhouette and minimal detail. No gradients, 3D, shadows, glow, texture, mockups, presentation board, frames, extra symbols, extra fingers, watermark, or background rectangle.
+

@@ -1,0 +1,17 @@
+{
+  "raw_dir": "dataset/raw",
+  "extracted_dir": "dataset/extracted",
+  "cache_dir": "dataset/cache",
+  "runs_dir": "runs",
+  "exports_dir": "exports",
+  "hand_model": "models/hand_landmarker.task",
+  "face_model": "models/face_landmarker.task",
+  "signs_file": "signs.csv",
+  "detection_confidence": 0.5,
+  "min_hand_rate": 0.8,
+  "min_both_hands_rate": 0.8,
+  "swap_hands": false,
+  "seed": 42,
+  "expected_signers": ["S1", "S2", "S3", "S4", "S5", "S6", "S7"],
+  "takes_per_signer": 15
+}

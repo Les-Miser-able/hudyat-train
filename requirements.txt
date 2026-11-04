@@ -1,0 +1,11 @@
+# Python 3.12, matching the manuscript's recommended training stack.
+numpy==1.26.4
+mediapipe==0.10.21
+opencv-contrib-python==4.11.0.86
+tensorflow==2.19.1
+protobuf>=4.25.3,<5
+matplotlib==3.11.2
+Pillow==12.3.0
+# MediaPipe's optional JAX dependency must also support NumPy 1.26.
+jax==0.4.35
+jaxlib==0.4.35
