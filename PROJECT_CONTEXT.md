@@ -1,5 +1,7 @@
 # Agreed project context
 
+Latest UI decision: after reviewing the Studio browser prototype and its native adaptation, the user explicitly chose browser mode to retain the prototype's appearance. `launch.cmd`, the GUI entry point, and live-testing entry point now open a local browser studio served by Python on `127.0.0.1`. The existing CLI extraction/training/testing/export workers, study safeguards, saved artifacts, and HUDYAT simulator remain the processing pipeline. Camera preview frames stay in memory and are not added to job logs. This replaces the earlier native-shell preference below; the manuscript and methodology are unchanged.
+
 The user confirmed this flow:
 
 1. `hudyat-track` collects original media.
