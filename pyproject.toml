@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hudyat-train"
 version = "0.1.0"
-description = "Desktop landmark extraction, Conv1D-BiLSTM training, and HUDYAT model exports"
+description = "Local browser studio for landmark extraction, Conv1D-BiLSTM training, and HUDYAT model exports"
 requires-python = ">=3.12"
 dynamic = ["dependencies"]
 
@@ -13,10 +13,13 @@ dynamic = ["dependencies"]
 hudyat-train = "hudyat_train.cli:main"
 
 [project.gui-scripts]
-hudyat-train-desktop = "hudyat_train.gui:main"
+hudyat-train-desktop = "hudyat_train.web_app:main"
 
 [tool.setuptools.packages.find]
 include = ["hudyat_train*"]
+
+[tool.setuptools.package-data]
+hudyat_train = ["web_ui/*.html", "web_ui/*.css", "web_ui/*.js"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}

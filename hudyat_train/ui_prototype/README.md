@@ -20,4 +20,4 @@ Use the floating arrows or keyboard Left/Right to switch. The current variant is
 
 Try the sidebar, category and input selectors, chart tabs, training configuration, simulated run/pause/cancel, dataset scanning/extraction, run inspection, mock sign testing, and export preview. Export previews do not write files.
 
-No winning direction has been selected. Keep this separate from production; once reviewed, capture the options on a throwaway branch and implement the chosen design in the real desktop UI.
+The working application now follows **A / Studio** in the browser, using this prototype's HTML/CSS visual language with real Python workers and saved reports. The user selected browser mode after the native adaptation did not match the prototype closely enough. The original options are preserved in commit `5974bab` (`PROTOTYPE`); this folder remains a throwaway reference. Production assets live in `hudyat_train/web_ui/` and contain no variant switcher or simulated actions.

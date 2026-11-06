@@ -1,6 +1,6 @@
 # HUDYAT Train
 
-A native desktop application and CLI for the middle of the HUDYAT pipeline:
+A local browser studio and CLI for the middle of the HUDYAT pipeline:
 
 `hudyat-track recordings -> hudyat-train landmarks and models -> HUDYAT browser inference`
 
@@ -8,16 +8,18 @@ The agreed manuscript and implementation decisions are recorded in [PROJECT_CONT
 
 **Start the application**
 
-Use Python 3.12, 64-bit, including its Tcl/Tk component. From PowerShell in this folder, run:
+Use Python 3.12, 64-bit. From PowerShell in this folder, run:
 
 ```powershell
 .\setup.ps1
 .\launch.cmd
 ```
 
-After setup, double-click `launch.cmd` to open the desktop application. All processing is local once Python packages and the detector assets are installed. Installing dependencies needs a network connection. `setup.ps1` uses this project's `.venv` and pins TensorFlow 2.19.1, MediaPipe 0.10.21, and NumPy 1.26.4.
+After setup, double-click `launch.cmd`. It starts a Python server on `127.0.0.1` and opens the Studio dashboard in your default browser. The selected URL is also saved in `tmp/studio-url.txt`. All processing is local once Python packages and detector assets are installed. Installing dependencies needs a network connection. `setup.ps1` uses this project's `.venv` and pins TensorFlow 2.19.1, MediaPipe 0.10.21, and NumPy 1.26.4.
 
-The desktop shell and dataset scanner use the Python standard library. Extraction needs MediaPipe/OpenCV/NumPy/Pillow; training and export need TensorFlow/NumPy/Matplotlib. The Settings tab can select separate Python executables for these operations. Blank interpreter fields use the Python that launched the application. This is useful for testing with existing environments, but final study runs require TensorFlow 2.19.1.
+The studio server and dataset scanner use the Python standard library. The browser interface uses the reviewed prototype's HTML/CSS, without a frontend build step, CDN assets, or new runtime dependencies. Extraction needs MediaPipe/OpenCV/NumPy/Pillow; training and export need TensorFlow/NumPy/Matplotlib. Settings can select separate Python executables for these operations. Blank interpreter fields use the Python that launched the application. This is useful for testing with existing environments, but final study runs require TensorFlow 2.19.1.
+
+For a terminal launch without automatically opening a browser, run `.\.venv\Scripts\python.exe -m hudyat_train.web_app --port 8767 --no-browser`, then visit `http://127.0.0.1:8767/`. The service binds only to loopback and checks its host, local session, request origin, and per-session token before accepting actions. It is a local workstation tool, not a remotely hosted service.
 
 The hand and face `.task` files belong in `models/`; see [models/README.md](models/README.md). Matching copies from the collector are already present in this checkout.
 
@@ -48,16 +50,20 @@ No metadata file is required. If you copy the collector's `dataset/metadata.csv`
 
 Raw media is read in place. Extraction does not move or delete it. `dataset/cache/` contains detected hand coordinates and derived face-location values; full face landmark arrays are not retained. `dataset/extracted/` contains the model inputs and an index recording accepted/rejected sources and their reasons.
 
-**Use the desktop workflow**
+**Use the Studio workflow**
+
+Studio carries the browser prototype's dark icon rail, gradients, rounded panels, orange actions, and mint status indicators into the working trainer. **Overview** shows the selected version's last saved raw-data scan, actual training/validation curves, and recorded experiments. Category and input selectors filter the model view. Scan counts are before extraction quality checks; development and evaluation protocol labels remain visible. The original Tkinter module remains for compatibility; normal launch, `gui`, and `live` entry points now open Studio.
+
+Choose a page in the sidebar. **New training run** opens the real training settings. Folder buttons open an in-browser local path picker. **Job log** shows recent worker output and a link to its complete saved log. Failed jobs expand the log automatically. The dashboard refreshes after scans, result refreshes, and completed training epochs.
 
 1. In **Dataset**, scan the selected version. Select a category to see its sign-by-signer counts. These are raw counts before extraction quality checks.
 2. In **Extract**, extract a category, or choose `all`. Hand detection must reach 80% inside the trimmed sign window. Two-hand signs also require 80% both-hands detection. Family requires usable face-location information.
 3. In **Train**, choose `random` or `loso`. A study run requires every expected class and at least 15 accepted sources for each of S1-S7. Use the explicit **Development run** option for incomplete data or fewer epochs.
-4. In **Test models**, select a model/run and choose automated held-out testing, native live webcam testing, or **Simulate HUDYAT**. Each records its results separately.
+4. In **Test models**, select a model/run and choose automated held-out testing, live webcam testing, or **Simulate HUDYAT**. Each records its results separately. Live testing uses the existing Python camera worker and streams its latest preview into Studio. **Start HUDYAT simulator** starts the separate browser runtime; use **Open recognition lab** once its link appears.
 5. In **Results**, browse the comparison, summary, per-class, and attempt tables, and view graphs or open the complete HTML report.
 6. In **Export**, select a completed random-split run. Export a bundle, then verify it against the installed HUDYAT client. The job log is also saved under `reports/jobs/`.
 
-The Stop button requests cancellation at the next frame or training batch. Closing the application during a job first requests cancellation. Interrupted or failed runs cannot be exported.
+**Stop job** requests cancellation at the next frame or training batch. Closing a browser tab leaves the local server and current job running; reopen the URL in `tmp/studio-url.txt` to return. Use **Exit trainer** at the bottom of the sidebar to stop a running job safely and shut down the server. Interrupted or failed runs cannot be exported.
 
 **The two versions**
 
@@ -104,7 +110,7 @@ Training logs every completed epoch immediately to `events.jsonl`, `history.csv`
 | LOSO mean and SD | Fold means and sample standard deviations | `RUN/loso-summary.csv` |
 | Parameters | Recorded configuration for reproducibility | `RUN_OR_SESSION/parameters.csv` |
 
-PNG graphs include training/validation curves, a confusion matrix, per-class precision/recall/F1, LOSO fold/mean-SD comparisons, and test-session confidence/inference timing. The **Graphs** pane previews these; **Open full-size graph** and **Open HTML report** expose shareable local artifacts. The HTML report includes viewable tables and CSV links. Long attempt tables show the first 500 rows in the desktop; the CSV and HTML retain all attempts.
+PNG graphs include training/validation curves, a confusion matrix, per-class precision/recall/F1, LOSO fold/mean-SD comparisons, and test-session confidence/inference timing. The **Graphs** pane previews these; click a graph to open it full-size. Report and CSV links expose the complete local artifacts. The HTML report includes viewable tables and CSV links. Long attempt tables show the first 500 rows in Studio; the CSV and HTML retain all attempts.
 
 **Automated and manual testing**
 
@@ -112,13 +118,13 @@ PNG graphs include training/validation curves, a confusion matrix, per-class pre
 
 **Live webcam testing** accepts either a completed run/fold or an exported version folder containing `model.json` and `weights.bin`. Select the model and camera index, then press **Start camera**. The Python environment selected by **Train & test Python** must contain both TensorFlow and MediaPipe; the pinned setup provides them together.
 
-The camera preview targets 30 FPS and refreshes independently of landmark detection and model prediction. Detection always takes the latest available camera frame, avoiding a growing queue of delayed video. The desktop displays separate preview and detection FPS; actual rates depend on the camera and computer. Hand points older than 0.2 seconds are hidden from the preview. Display mirroring and preview timing do not alter the model's landmark preprocessing. Video-file replay still processes every frame in order.
+The camera worker targets 30 FPS and refreshes independently of landmark detection and model prediction. Detection and the Studio preview both consume the latest available frame, avoiding a growing queue of delayed video. Studio displays the worker's separate preview and detection FPS; the browser display rate also depends on image decoding and local transport. Hand points older than 0.2 seconds are hidden from the preview. Display mirroring and preview timing do not alter the model's landmark preprocessing. Video-file replay still processes every frame in order.
 
 - Choose an **Expected sign** to score attempts, or leave **(unscored)** for exploration. The expected sign is never inferred from the model's own answer.
 - In **Automatic sign window**, a hand appearing begins capture; hands disappearing for 0.2 seconds ends it. Windows have a 0.1-second prebuffer and a three-second limit. After a maximum-length attempt, lower the hands before the next attempt.
 - In **Manual capture**, click **Start capture** (Space), perform a sign, then **Finish & evaluate** (Enter). A capture also ends after three seconds. Changing the expected sign or capture mode resets the pending capture and is logged.
 - The camera view shows hand points, live estimates, top predictions, and detection timing. Estimates during a gesture are exploratory and do not add repeated scored attempts. Completed captures produce one logged row.
-- Press **Stop & save reports** to close the camera and generate the session's graphs/tables. Closing the app also requests a stop. Camera pixels are previewed only; no video or preview image is saved in the result logs.
+- Press **Stop & save reports** to close the camera and generate the session's graphs/tables. **Exit trainer** also requests a stop. Camera pixels remain in memory for the local preview; no video or preview image is saved in the result logs.
 
 Live testing logs invalid captures, below-threshold predictions, correct/incorrect recognized signs, and unscored predictions separately. Raw top-1 accuracy uses valid labelled predictions. Successful-attempt rate also counts labelled rejections and invalid captures as failures. Unlabelled exploration has no accuracy score. Macro metrics in partial live sessions average only classes with ground-truth support, with untested classes explicitly listed; this is not complete study coverage.
 
@@ -126,13 +132,13 @@ Test sessions are stored in `reports/testing/<category>/<variant>/<timestamp-kin
 
 **Simulate HUDYAT's camera and recognition**
 
-Choose **Test models > Simulate HUDYAT** to test the selected model with the main project's actual browser pipeline. This includes its `useCamera`, `CategoryRecognition`, model loader, normalization, sign segmentation, early checks, static Alphabet hold rules, confidence/margin gates, CPU/GPU tracking and fallback, background blur/removal, preview blur, preloading, and candidate-model selection. It runs TensorFlow.js and MediaPipe Tasks in your browser. The native live tester keeps its existing Python testing behavior.
+Choose **Test models > Simulate HUDYAT** to test the selected model with the main project's actual browser pipeline. This includes its `useCamera`, `CategoryRecognition`, model loader, normalization, sign segmentation, early checks, static Alphabet hold rules, confidence/margin gates, CPU/GPU tracking and fallback, background blur/removal, preview blur, preloading, and candidate-model selection. It runs TensorFlow.js and MediaPipe Tasks in your browser. Studio's live tester keeps the existing Python testing behavior.
 
 Node.js 24 is needed for the simulator. Run `setup-simulator.cmd` once to install its packages. In **Settings**, select the current HUDYAT project folder. The simulator builds from that folder at launch and checks that its React, TensorFlow.js, and MediaPipe versions match HUDYAT's lockfile. It reads HUDYAT's sources and public assets without modifying the main project.
 
 Select a completed **random-split training run** or an exported **model version** containing `model.json` and `weights.bin`, then press **Open HUDYAT camera simulator**. A selected Keras run is exported into a private `tmp/` bundle for this session; it is not published or registered with HUDYAT. Select an optional Alphabet candidate run/export to enable comparison with the published selection. LOSO folds remain evaluation artifacts; use a completed random run or an existing export for the simulator.
 
-In the browser, choose an **Expected sign**, press **Enter camera step**, then **Start camera** and allow camera access. The original HUDYAT Recognition lab provides **Baseline**, **Enhanced**, and individual settings. Camera resolution changes apply after stopping/restarting the camera. **Complete settings / import from HUDYAT** accepts either a settings object or the main project's **Copy results (JSON)** output, including sliding-window parameters. Edited JSON should use `profile: "custom"`; named profiles use HUDYAT's current definitions. **New attempt** repeats a prompt, and **Finish simulation** saves the reports and stops the local server. The desktop **Stop job** also stops it and releases the browser camera after the next heartbeat.
+In the recognition lab, choose an **Expected sign**, press **Enter camera step**, then **Start camera** and allow camera access. The original HUDYAT Recognition lab provides **Baseline**, **Enhanced**, and individual settings. Camera resolution changes apply after stopping/restarting the camera. **Complete settings / import from HUDYAT** accepts either a settings object or the main project's **Copy results (JSON)** output, including sliding-window parameters. Edited JSON should use `profile: "custom"`; named profiles use HUDYAT's current definitions. **New attempt** repeats a prompt, and **Finish simulation** saves the reports and stops the simulator server. Studio's **Stop job** also stops it and releases the browser camera after the next heartbeat.
 
 The browser requests the same user-facing camera and ideal resolution as HUDYAT; its native camera index setting does not apply. This reproduces the current main-project settings and decision code on the browser/device being used. Camera negotiation, drivers, CPU/GPU availability, and performance still depend on that device. Lesson navigation, authentication and grading are outside this local test shell.
 

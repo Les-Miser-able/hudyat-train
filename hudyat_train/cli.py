@@ -26,7 +26,7 @@ def parser():
     p.add_argument("--root", type=Path, default=ROOT, help="Project directory containing project.json")
     p.add_argument("--cancel-file", type=Path, help=argparse.SUPPRESS)
     sub = p.add_subparsers(dest="command", required=True)
-    sub.add_parser("gui", help="Open the desktop application")
+    sub.add_parser("gui", help="Open the local browser studio")
     sub.add_parser("init", help="Create category/class/signer folders without changing raw files")
     sub.add_parser("doctor", help="Check Python packages, detector assets, and local paths")
     audit = sub.add_parser("audit", help="Compare fixed study signs and settings with HUDYAT's checked-in code")
@@ -61,7 +61,7 @@ def parser():
     testing.add_argument("--run", type=Path, required=True)
     results = sub.add_parser("results", help="Refresh the experiment history and its CSV comparison table")
     results.add_argument("--rebuild", action="store_true", help="Also generate graphs and HTML reports for older completed runs")
-    live = sub.add_parser("live", help="Open the desktop's live model tester")
+    live = sub.add_parser("live", help="Open the browser studio's live model tester")
     live.add_argument("--run", type=Path, required=True)
     live.add_argument("--camera", type=int, default=0)
     live.add_argument("--mode", choices=("automatic", "manual"), default="automatic")
@@ -96,7 +96,7 @@ def main(argv=None):
         job = Job(args.cancel_file)
         job.check()
         if args.command == "gui":
-            from .gui import main as gui
+            from .web_app import main as gui
             gui(settings.root)
         elif args.command == "init":
             initialize(settings)
@@ -173,7 +173,7 @@ def main(argv=None):
                 job.emit(f"{record['kind']} | {record.get('category')} | {record.get('variant')} | {record.get('status')} | {accuracy} | {record['path']}")
             job.emit(f"Experiment table: {settings.root / 'reports' / 'experiments.csv'}")
         elif args.command == "live":
-            from .gui import main as gui
+            from .web_app import main as gui
             gui(settings.root, testing_run=project_path(args.run), camera=args.camera, mode=args.mode)
         elif args.command == "live-worker":
             from .realtime import run_live
